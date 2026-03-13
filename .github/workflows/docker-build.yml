@@ -1,0 +1,85 @@
+# Nazwa widoczna w zakładce Actions na GitHubie
+name: Build & Push Docker Image
+
+# ── Triggery ──────────────────────────────────────────────────────────
+on:
+  push:
+    branches: [main]           # każdy push na main = build + push image
+    tags: ['v*.*.*']           # każdy tag semver = build + push z wersją
+  pull_request:
+    branches: [main]           # PR = build bez push (weryfikacja)
+
+# ── Uprawnienia ───────────────────────────────────────────────────────
+# GITHUB_TOKEN domyślnie ma read-only — explicite dajemy write do packages
+# packages = GHCR (GitHub Container Registry)
+permissions:
+  contents: read
+  packages: write
+
+# ── Jobs ──────────────────────────────────────────────────────────────
+jobs:
+  build-and-push:
+    name: Build & Push
+    runs-on: ubuntu-latest     # GitHub-hosted runner = świeży Ubuntu każdy raz
+
+    steps:
+      # 1. Pobierz kod — bez tego runner nie ma dostępu do repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. Buildx = rozszerzony builder Dockera (multi-platform, cache export)
+      # Bez tego masz stary docker build bez cache export
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 3. Zaloguj się do GHCR
+      # GITHUB_TOKEN jest wstrzykiwany automatycznie przez GitHub — zero konfiguracji
+      # github.actor = nazwa użytkownika który triggeruje workflow
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 4. Generuj tagi i labels automatycznie
+      # docker/metadata-action czyta git context i produkuje sensowne tagi:
+      # - push na main          → ghcr.io/user/repo:main + :sha-abc1234
+      # - push taga v0.1.0      → ghcr.io/user/repo:0.1.0 + :latest
+      # - pull request          → ghcr.io/user/repo:pr-42
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+
+      # 5. Build i push — serce pipeline'u
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # push tylko gdy NIE jest to pull request
+          # PR z forka nie ma dostępu do sekretów — push by failował
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Cache między buildami — bez tego każdy build = zimny cache
+          # type=gha = GitHub Actions Cache (darmowy, do 10GB)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Przekaż wersję jako build arg → widoczna w /health endpoint
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+
+      # 6. Podsumowanie w UI — klikasz w run i widzisz od razu jakie tagi
+      - name: Summary
+        run: |
+          echo "## Docker Image Built ✅" >> $GITHUB_STEP_SUMMARY
+          echo "**Tags:**" >> $GITHUB_STEP_SUMMARY
+          echo '${{ steps.meta.outputs.tags }}' | tr ',' '\n' | sed 's/^/- /' >> $GITHUB_STEP_SUMMARY

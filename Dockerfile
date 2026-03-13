@@ -10,9 +10,14 @@ RUN mkdir -p /app/data && chown -R node:node /app/data
 
 EXPOSE 3000
 
+ARG APP_VERSION=dev
+
+
 ENV NODE_ENV=production \
     PORT=3000 \
-    HOST=0.0.0.0
+    HOST=0.0.0.0 \
+    DATA_DIR=/app/data \
+    APP_VERSION=${APP_VERSION}
 
 VOLUME ["/app/data"]
 

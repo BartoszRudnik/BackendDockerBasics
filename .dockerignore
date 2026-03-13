@@ -1,0 +1,30 @@
+# Zależności — budujemy w kontenerze, nie kopiujemy z hosta
+node_modules/
+
+# Git — historia repozytorium nie należy do image'a
+.git/
+.gitignore
+
+# Środowisko lokalne — NIGDY do image'a
+.env
+.env.*
+.envrc
+
+# Logi i artefakty developerskie
+*.log
+npm-debug.log*
+
+# System
+.DS_Store
+Thumbs.db
+
+# Dokumentacja i config developerski
+README.md
+.dockerignore
+docker-compose*.yml
+
+# Tymczasowe pliki edytorów
+.vscode/
+.idea/
+*.swp
+*.swo

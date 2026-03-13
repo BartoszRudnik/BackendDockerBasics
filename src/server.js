@@ -94,6 +94,7 @@ function requestHandler(req, res) {
             version: APP_VERSION,
             uptime: Math.floor(process.uptime()),
             timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV,
         });
         res.writeHead(200, {
             'Content-Type': 'application/json',
